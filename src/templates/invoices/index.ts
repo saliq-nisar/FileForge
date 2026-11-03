@@ -3,7 +3,7 @@ import { KIND_CONFIG, type BusinessDocument, type Party } from "@/features/busin
 import { DEFAULT_THEME, plain, type Block, type DocumentModel } from "@/services/documents/model";
 
 function partyBlocks(label: string, p: Party, t: { muted: string }, withTax = true): Block[] {
-  const lines = [p.address, p.email, p.phone, p.website, withTax && p.taxId ? `Tax ID: ${p.taxId}` : "", p.registration ? `Reg. no: ${p.registration}` : ""].filter(Boolean);
+ const lines = [p.address, p.email, p.phone, p.website, withTax && p.taxId ? `Tax ID: ${p.taxId}` : "", p.registration ? `Reg. no: ${p.registration}` : ""].filter(Boolean);
   return [
     { type: "paragraph", runs: plain(label.toUpperCase(), { color: t.muted, bold: true }), size: 8, spaceAfter: 2 },
     { type: "paragraph", runs: plain(p.name || "—", { bold: true }), spaceAfter: 1 },
