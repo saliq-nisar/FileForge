@@ -17,6 +17,7 @@ const UNICODE_FONT_FILES = {
 } as const;
 
 type Weight = keyof typeof UNICODE_FONT_FILES;
+const SYMBOL_FONT_FILE = "Geist-Regular.ttf";
 
 const fontBytesCache = new Map<string, Promise<ArrayBuffer>>();
 
@@ -59,15 +60,15 @@ export class FontSet {
     return font;
   }
 
-  /** Font able to render `text`: the standard font when possible, else embedded Liberation Sans. */
+  /** Font able to render `text`: the standard font, Unicode font, or symbol fallback. */
   async forText(text: string, weight: Weight = "regular"): Promise<PDFFont> {
     const std = await this.get(weight);
     if (canEncode(std, text)) return std;
-    try {
-      return await this.unicode(weight);
-    } catch {
-      return std;
-    }
+    const unicode = await this.unicode(weight);
+    if (canEncode(unicode, text)) return unicode;
+    const symbols = await this.symbols();
+    if (canEncode(symbols, text)) return symbols;
+    throw new Error("No bundled PDF font supports this text.");
   }
 
   async unicode(weight: Weight = "regular"): Promise<PDFFont> {
@@ -76,6 +77,17 @@ export class FontSet {
     if (!font) {
       this.doc.registerFontkit(fontkit);
       font = await this.doc.embedFont(await loadUnicodeFontBytes(UNICODE_FONT_FILES[weight]), { subset: true });
+      this.cache.set(key, font);
+    }
+    return font;
+  }
+
+  async symbols(): Promise<PDFFont> {
+    const key = "symbols";
+    let font = this.cache.get(key);
+    if (!font) {
+      this.doc.registerFontkit(fontkit);
+      font = await this.doc.embedFont(await loadUnicodeFontBytes(SYMBOL_FONT_FILE), { subset: true });
       this.cache.set(key, font);
     }
     return font;

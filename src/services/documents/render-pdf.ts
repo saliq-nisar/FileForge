@@ -1,12 +1,13 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import { FontSet, safeText } from "@/services/pdf/fonts";
+import { canEncode, FontSet, safeText } from "@/services/pdf/fonts";
 import { hexToRgb, PAGE_SIZES } from "@/services/pdf/document";
-import type { Align, Block, DocumentModel, Inline } from "./model";
+import { modelToText, type Align, type Block, type DocumentModel, type Inline } from "./model";
 
 interface Fonts {
   regular: PDFFont;
   bold: PDFFont;
   italic: PDFFont;
+  symbols: PDFFont;
 }
 
 interface Segment {
@@ -21,17 +22,30 @@ interface Line {
   width: number;
 }
 
-async function loadFonts(doc: PDFDocument, family: "sans" | "serif"): Promise<Fonts> {
+async function loadFonts(doc: PDFDocument, family: "sans" | "serif", model: DocumentModel): Promise<Fonts> {
+  const set = new FontSet(doc, family);
+  let regular: PDFFont;
+  let bold: PDFFont;
+  let italic: PDFFont;
   if (family === "sans") {
     // Liberation Sans: Arial-compatible metrics, broad Unicode coverage, ATS-safe.
-    const set = new FontSet(doc, "sans");
     try {
-      return { regular: await set.unicode("regular"), bold: await set.unicode("bold"), italic: await set.unicode("italic") };
+      regular = await set.unicode("regular");
+      bold = await set.unicode("bold");
+      italic = await set.unicode("italic");
     } catch {
-      return { regular: await doc.embedFont(StandardFonts.Helvetica), bold: await doc.embedFont(StandardFonts.HelveticaBold), italic: await doc.embedFont(StandardFonts.HelveticaOblique) };
+      regular = await doc.embedFont(StandardFonts.Helvetica);
+      bold = await doc.embedFont(StandardFonts.HelveticaBold);
+      italic = await doc.embedFont(StandardFonts.HelveticaOblique);
     }
+  } else {
+    regular = await doc.embedFont(StandardFonts.TimesRoman);
+    bold = await doc.embedFont(StandardFonts.TimesRomanBold);
+    italic = await doc.embedFont(StandardFonts.TimesRomanItalic);
   }
-  return { regular: await doc.embedFont(StandardFonts.TimesRoman), bold: await doc.embedFont(StandardFonts.TimesRomanBold), italic: await doc.embedFont(StandardFonts.TimesRomanItalic) };
+  const text = `${modelToText(model)}•`;
+  const symbols = [regular, bold, italic].some((font) => !canEncode(font, text)) ? await set.symbols() : regular;
+  return { regular, bold, italic, symbols };
 }
 
 class PdfRenderer {
@@ -60,8 +74,9 @@ class PdfRenderer {
     if (allowBreak && this.y + h > this.bottom && this.y > this.m + 1) this.newPage();
   }
 
-  private font(r: Inline): PDFFont {
-    return r.bold ? this.fonts.bold : r.italic ? this.fonts.italic : this.fonts.regular;
+  private font(r: Inline, text: string): PDFFont {
+    const font = r.bold ? this.fonts.bold : r.italic ? this.fonts.italic : this.fonts.regular;
+    return canEncode(font, text) || !canEncode(this.fonts.symbols, text) ? font : this.fonts.symbols;
   }
 
   /** Word-wrap mixed-style runs into lines. */
@@ -79,7 +94,7 @@ class PdfRenderer {
       cur = { segs: [], width: 0 };
     };
     for (const run of runs) {
-      const font = this.font(run);
+      const font = this.font(run, run.text);
       const color = run.color ?? baseColor;
       const parts = safeText(font, run.text).split(/(\n|\s+)/).filter((p) => p !== "");
       for (const part of parts) {
@@ -177,9 +192,10 @@ class PdfRenderer {
             lines.forEach((line, i) => {
               if (draw) this.ensure(size * t.lineHeight, allowBreak);
               if (i === 0 && draw) {
-                const ascent = this.fonts.regular.heightAtSize(size, { descender: false });
+                const bulletFont = canEncode(this.fonts.regular, "•") ? this.fonts.regular : this.fonts.symbols;
+                const ascent = bulletFont.heightAtSize(size, { descender: false });
                 const lh = size * t.lineHeight;
-                this.page.drawText(safeText(this.fonts.regular, "•"), { x, y: this.H - (this.y + (lh - size) / 2 + ascent), size, font: this.fonts.regular, color: hexToRgb(t.text) });
+                this.page.drawText(safeText(bulletFont, "•"), { x, y: this.H - (this.y + (lh - size) / 2 + ascent), size, font: bulletFont, color: hexToRgb(t.text) });
               }
               this.drawLine(line, x + indent, width - indent, size, "left", draw);
             });
@@ -329,7 +345,7 @@ class PdfRenderer {
   footer() {
     if (!this.model.footer) return;
     const size = this.model.theme.size * 0.8;
-    const font = this.fonts.regular;
+    const font = canEncode(this.fonts.regular, this.model.footer) ? this.fonts.regular : this.fonts.symbols;
     const text = safeText(font, this.model.footer);
     this.pages.forEach((p, i) => {
       const label = this.pages.length > 1 ? `${text}${text ? "  ·  " : ""}${i + 1} / ${this.pages.length}` : text;
@@ -349,7 +365,7 @@ export async function renderPdf(model: DocumentModel): Promise<Uint8Array> {
   doc.setCreator("FileForge");
   doc.setProducer("FileForge");
   doc.setLanguage("en");
-  const fonts = await loadFonts(doc, model.theme.font);
+  const fonts = await loadFonts(doc, model.theme.font, model);
   const r = new PdfRenderer(doc, model, fonts);
   const m = model.theme.margin;
   r.blocks(model.blocks, m, PAGE_SIZES[model.pageSize][0] - m * 2, true);

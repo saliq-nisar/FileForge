@@ -114,7 +114,6 @@ function placeLine(page: PDFPage, font: PDFFont, text: string, size: number, ali
 export async function addPageNumbers(inputs: InputFile[], options: ToolOptions, ctx: ProcessContext): Promise<ProcessResult> {
   const doc = await loadPdf(inputs[0]);
   const fonts = new FontSet(doc);
-  const font = await fonts.get("regular");
   const size = num(options, "fontSize", 10);
   const format = str(options, "format", "{n}");
   const start = num(options, "start", 1);
@@ -124,14 +123,14 @@ export async function addPageNumbers(inputs: InputFile[], options: ToolOptions, 
   const numbered = skipFirst ? total - 1 : total;
   const color = hexToRgb("#222222");
 
-  doc.getPages().forEach((page, i) => {
+  for (const [i, page] of doc.getPages().entries()) {
     throwIfAborted(ctx.signal);
-    if (skipFirst && i === 0) return;
+    if (skipFirst && i === 0) continue;
     const n = start + (skipFirst ? i - 1 : i);
     const label = format.replace("{n}", String(n)).replace("{total}", String(numbered + start - 1));
-    placeLine(page, font, label, size, horizontal, vertical, color, 28);
+    placeLine(page, await fonts.forText(label), label, size, horizontal, vertical, color, 28);
     ctx.onProgress({ ratio: i / total, message: `Numbering page ${i + 1}` });
-  });
+  }
   return { files: [toProcessedFile(deriveFileName(inputs[0].name, "numbered", "pdf"), "application/pdf", await savePdf(doc))] };
 }
 

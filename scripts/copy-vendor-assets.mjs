@@ -23,6 +23,8 @@ function copy(from, to, filter) {
 copy("pdfjs-dist/build/pdf.worker.min.mjs", "pdfjs/pdf.worker.min.mjs");
 copy("pdfjs-dist/cmaps", "pdfjs/cmaps");
 copy("pdfjs-dist/standard_fonts", "pdfjs/standard_fonts");
+copy("next/dist/compiled/@vercel/og/Geist-Regular.ttf", "pdfjs/standard_fonts/Geist-Regular.ttf");
+copy("next/dist/compiled/@vercel/og/LICENSE", "pdfjs/standard_fonts/Geist-LICENSE");
 copy("pdfjs-dist/wasm", "pdfjs/wasm");
 copy("tesseract.js/dist/worker.min.js", "tesseract/worker.min.js");
 copy("@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz", "tesseract/lang/eng.traineddata.gz");

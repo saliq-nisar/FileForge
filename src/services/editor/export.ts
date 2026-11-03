@@ -40,7 +40,7 @@ const fontWeight = (el: TextElement) => (el.bold ? "bold" : el.italic ? "italic"
 
 async function drawText(page: PDFPage, fonts: Record<FontFamily, FontSet>, el: TextElement) {
   const set = fonts[el.font];
-  const font: PDFFont = el.font === "sans" ? await set.forText(el.text, fontWeight(el)) : await set.get(fontWeight(el));
+  const font: PDFFont = await set.forText(el.text, fontWeight(el));
   const lines = wrapText(font, el.text, el.fontSize, Math.max(el.w, el.fontSize));
   const lh = el.fontSize * el.lineHeight;
   const ascent = font.heightAtSize(el.fontSize, { descender: false });

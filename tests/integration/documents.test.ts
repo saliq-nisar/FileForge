@@ -30,6 +30,31 @@ describe("invoice export", () => {
     }
   });
 
+  it("preserves the INR symbol in quote PDFs", async () => {
+    const quote = newBusinessDocument("quote", "QUO-2026-0001", null);
+    quote.currency = "INR";
+    quote.items = [{ ...newLineItem(), description: "Design work", quantity: 1, unitPrice: 1250 }];
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    for (const font of ["sans", "serif"] as const) {
+      quote.design.font = font;
+      const bytes = await renderPdf(buildBusinessModel(quote));
+      const loading = getDocument({
+        data: bytes,
+        standardFontDataUrl: new URL("../../public/vendor/pdfjs/standard_fonts/", import.meta.url).href,
+        useSystemFonts: false,
+      });
+      const pdf = await loading.promise;
+      try {
+        const page = await pdf.getPage(1);
+        const content = await page.getTextContent();
+        const text = content.items.map((item) => ("str" in item ? item.str : "")).join("");
+        expect(text, font).toContain("₹");
+      } finally {
+        await loading.destroy();
+      }
+    }
+  });
+
   it("shows correct totals in the document text", () => {
     const text = modelToText(buildBusinessModel(invoice()));
     expect(text).toContain("$850.00");
